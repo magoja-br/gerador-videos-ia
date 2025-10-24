@@ -19,10 +19,11 @@ const loadingMessages = [
 export const generateVideoFromImage = async (
   prompt: string,
   image: ImagePayload,
+  apiKey: string,
   updateLoadingMessage: (message: string) => void
 ): Promise<Blob> => {
   // Create a new instance for each call to ensure the latest API key is used.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   updateLoadingMessage("Initiating video generation...");
   let operation = await ai.models.generateVideos({
@@ -67,7 +68,7 @@ export const generateVideoFromImage = async (
   const downloadLink = operation.response.generatedVideos[0].video.uri;
   
   // The API key must be appended to the download URI
-  const videoResponse = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+  const videoResponse = await fetch(`${downloadLink}&key=${apiKey}`);
 
   if (!videoResponse.ok) {
     throw new Error(`Failed to download the generated video. Status: ${videoResponse.statusText}`);

@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { generateVideoFromImage } from './services/geminiService';
 import { ApiKeySelector } from './components/ApiKeySelector';
 import { ImageUploader } from './components/ImageUploader';
@@ -8,6 +7,7 @@ import { PromptInput } from './components/PromptInput';
 import { VideoPlayer } from './components/VideoPlayer';
 import { Loader } from './components/Loader';
 import { SparklesIcon } from './components/icons/SparklesIcon';
+import { SettingsIcon } from './components/icons/SettingsIcon';
 
 // Helper to convert file to base64
 const fileToBase64 = (file: File): Promise<{mimeType: string, data: string}> => {
@@ -26,48 +26,40 @@ const fileToBase64 = (file: File): Promise<{mimeType: string, data: string}> => 
 
 
 const App: React.FC = () => {
-  const [apiKeySelected, setApiKeySelected] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
   const [image, setImage] = useState<{ file: File | null; preview: string | null }>({ file: null, preview: null });
   const [prompt, setPrompt] = useState<string>('');
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadingMessage, setLoadingMessage] = useState<string>('Checking API Key status...');
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
-  const checkApiKey = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      if (await window.aistudio.hasSelectedApiKey()) {
-        setApiKeySelected(true);
-      } else {
-        setApiKeySelected(false);
-      }
-    } catch (e) {
-      setError('Could not verify API key status. Please refresh the page.');
-      setApiKeySelected(false);
-    } finally {
-      setIsLoading(false);
-      setLoadingMessage('');
-    }
-  }, []);
-
   useEffect(() => {
-    checkApiKey();
-  }, [checkApiKey]);
+    const savedKey = localStorage.getItem('gemini-api-key');
+    if (savedKey) {
+      setApiKey(savedKey);
+    }
+    setIsLoading(false);
+  }, []);
   
-  const handleApiKeySelected = () => {
-    setApiKeySelected(true);
+  const handleKeySubmit = (key: string) => {
+    localStorage.setItem('gemini-api-key', key);
+    setApiKey(key);
     setError(null);
-  }
+  };
+
+  const handleClearKey = () => {
+    localStorage.removeItem('gemini-api-key');
+    setApiKey(null);
+  };
 
   const handleGenerateVideo = async () => {
     if (!image.file || !prompt.trim()) {
       setError('Please upload an image and enter a prompt.');
       return;
     }
-    if (!apiKeySelected) {
-      setError('Please select an API Key first.');
+    if (!apiKey) {
+      setError('Please provide an API Key first.');
       return;
     }
 
@@ -82,6 +74,7 @@ const App: React.FC = () => {
       const videoBlob = await generateVideoFromImage(
         prompt,
         { mimeType, imageBytes: base64Data },
+        apiKey,
         (message) => setLoadingMessage(message)
       );
 
@@ -91,9 +84,9 @@ const App: React.FC = () => {
     } catch (e: any) {
       console.error(e);
       let errorMessage = 'An unexpected error occurred during video generation.';
-      if (e.message.includes('API key not valid') || e.message.includes('Requested entity was not found')) {
-        errorMessage = 'Your API key is invalid or not found. Please select a valid key.';
-        setApiKeySelected(false); // Force re-selection of the key
+       if (e.message.includes('API key not valid') || e.message.includes('Request had invalid authentication credentials') || e.message.includes('API_KEY_INVALID')) {
+        errorMessage = 'Your API key is invalid. Please enter a valid key.';
+        handleClearKey(); // Clear bad key and prompt for a new one
       } else if (e.message) {
         errorMessage = e.message;
       }
@@ -104,23 +97,31 @@ const App: React.FC = () => {
   };
 
   const isGenerateButtonDisabled = !image.file || !prompt.trim() || isLoading;
-
-  if (isLoading && !generatedVideoUrl) {
+  
+  if (isLoading && !apiKey) {
     return (
        <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-          <Loader message={loadingMessage} />
+          <Loader message="Initializing App..." />
        </div>
     );
   }
   
-  if (!apiKeySelected) {
-      return <ApiKeySelector onKeySelected={handleApiKeySelected} />;
+  if (!apiKey) {
+      return <ApiKeySelector onKeySubmit={handleKeySubmit} />;
   }
 
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-6xl mx-auto">
+      <div className="w-full max-w-6xl mx-auto relative">
+         <button 
+            onClick={handleClearKey} 
+            className="absolute top-2 right-2 p-2 text-gray-400 hover:text-white rounded-full bg-gray-800/50 hover:bg-gray-700 transition-colors z-10"
+            aria-label="Change API Key"
+            title="Change API Key"
+          >
+            <SettingsIcon className="w-6 h-6" />
+          </button>
         <header className="text-center mb-8">
           <h1 className="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
             AI Video Creator
@@ -152,7 +153,7 @@ const App: React.FC = () => {
           <div className="flex flex-col bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-700 min-h-[400px] lg:min-h-0">
              <h2 className="text-2xl font-semibold text-gray-200 border-b border-gray-600 pb-3 mb-4">2. Watch the Magic</h2>
             <div className="flex-grow flex items-center justify-center bg-gray-900/50 rounded-lg">
-               {isLoading ? (
+               {isLoading && loadingMessage ? (
                     <Loader message={loadingMessage} />
                 ) : error ? (
                     <div className="text-center text-red-400 p-4">
