@@ -1,0 +1,5 @@
+{
+  "name": "AI Video Creator from Image",
+  "description": "Upload an image of a person and provide a prompt to generate a unique video using AI. This application utilizes the Gemini API to bring your creative visions to life.",
+  "requestFramePermissions": []
+}
